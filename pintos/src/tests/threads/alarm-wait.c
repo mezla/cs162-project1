@@ -93,6 +93,8 @@ test_sleep (int thread_cnt, int iterations)
       thread_create (name, PRI_DEFAULT, sleeper, t);
     }
   
+  printf("OKK I am here [thinkhy 6/11/2015] \n");
+
   /* Wait long enough for all the threads to finish. */
   timer_sleep (100 + thread_cnt * iterations * 10 + 100);
 

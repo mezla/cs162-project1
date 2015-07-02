@@ -1,3 +1,8 @@
+/*****************************************************************
+ * ChangeList:
+ *  $A1 150623 thinkhy: Reimplement timer_sleep()) to avoid busy waiting
+ *
+ *****************************************************************/
 #include "devices/timer.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -29,6 +34,8 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
+
+static struct list alarm_list;
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -92,6 +99,7 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
+  /* TODO: @AA1 */
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
 }
@@ -165,13 +173,15 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+   // thinkhy add
+  printf("tick\n", 5);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
