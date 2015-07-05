@@ -1,8 +1,8 @@
-/*****************************************************************
- * ChangeList:
- *  $A1 150623 thinkhy: Reimplement timer_sleep()) to avoid busy waiting
+/***********************************************************
  *
- *****************************************************************/
+ * $A1 150704 thinkhy  alarm lock without busy-waiting
+ *
+ ***********************************************************/
 #include "devices/timer.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -12,6 +12,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"		                                  /* @A1A */
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -21,6 +22,20 @@
 #if TIMER_FREQ > 1000
 #error TIMER_FREQ <= 1000 recommended
 #endif
+
+
+/* List of threads in sleeping state, the threads will be 
+ * waked up until specified duration passed  */
+static struct list sleeping_list;            			          /* @A1A */
+
+/* duration info saved in sleepign list */
+struct thread_duration          /*                                           @A1A */
+  {                             /*                                           @A1A */
+    struct  list_elem elem;     /*                                           @A1A */
+    int64_t due;                /* # of timer ticks thread will be sleeping for. @A1A */
+    struct thread  *t;          /* sleeping thread.                          @A1A */
+  };                            /*                                           @A1A */
+
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
@@ -35,8 +50,6 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
-static struct list alarm_list;
-
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -44,6 +57,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  list_init (&sleeping_list);    				/* @A1A */
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -96,12 +111,26 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  enum intr_level old_level;                                                     /* @A1A */      
+  int64_t start = timer_ticks ();						    
 
   ASSERT (intr_get_level () == INTR_ON);
-  /* TODO: @AA1 */
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  /* while (timer_elapsed (start) < ticks)                                          @A1D */
+  /* thread_yield ();				                                    @A1D */
+
+
+  struct thread_duration *p = 						         /* @A1A */
+     	       (struct thread_duration*) malloc(sizeof(struct thread_duration)); /* @A1A */
+  if (p == NULL)
+    PANIC ("couldn't allocate thread_duration");                                 /* @A1A */
+
+  p->t = thread_current();                                                       /* @A1A */
+  p->due = start + ticks;							 /* @A2A */				
+
+  old_level = intr_disable (); 							 /* @A1A */
+  list_push_back (&sleeping_list, &p->elem);                                     /* @A1A */
+  thread_block ();						                 /* @A1A */
+  intr_set_level (old_level);							 /* @A1A */	
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -173,15 +202,28 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  struct list_elem *e;                                    		         /* @A1A */        
+
   ticks++;
   thread_tick ();
-   // thinkhy add
-  printf("tick\n", 5);
+   
+  for (e = list_begin (&sleeping_list);                                          /* @A1A */ 
+            e != list_end (&sleeping_list); e = list_next (e))                   /* @A1A */        
+    {				                                                 /* @A1A */
+      struct thread_duration *p = list_entry (e, struct thread_duration, elem);  /* @A1A */
+      ASSERT(p != NULL);                                                         /* @A1A */
+
+      printf ("timer_interrupt: p->due %lld  ticks: %lld\n", p->due, ticks);     /* @A1A */
+      if (p->due <= ticks) {                                                     /* @A1A */
+	thread_unblock(p->t);                                                    /* @A1A */
+	list_remove (&p->elem);                                                  /* @A1A */
+      }                                                                          /* @A1A */
+    }                                                                            /* @A1A */
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
