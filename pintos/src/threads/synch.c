@@ -1,3 +1,9 @@
+/***********************************************************
+ *
+ * $A2 150704 thinkhy  priority scheduler
+ *
+ ***********************************************************/
+
 /* This file is derived from source code for the Nachos
    instructional operating system.  The Nachos copyright notice
    is reproduced in full below. */
@@ -192,11 +198,46 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
+  enum intr_level old_level;                        /* @A2A */
+  struct thread *t = thread_current ();             /* @A2A */
+  struct thread *holder = lock->holder;             /* @A2A */
+  struct list_elem *e;                              /* @A2A */
+
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  sema_down (&lock->semaphore);
+  /* if lock holder is not NULL, put current thread
+   * into lock holder's waiting list @A2A
+   */
+  if (holder != NULL) 
+   {
+     old_level = intr_disable ();                               /* @A2A */
+     list_push_back (&holder->waiting_list, &t->elem);          /* @A2A */
+     t->is_dirty = true;                                        /* @A2A */
+     intr_set_level (old_level);                                /* @A2A */
+
+     sema_down (&lock->semaphore);                              /* @A2A */
+
+     old_level = intr_disable ();                               /* @A2A */
+
+     /* Copy waiters from last holder to current                 
+      * thread's waiting list                                   
+      */ 
+     for ( e = list_begin (&lock->semaphore.waiters);          /* @A2A */
+	e != list_end(&lock->semaphore.waiters); e = list_next(e) ) /* @A2A */ 
+      {
+         struct thread *waiter = list_entry(e, struct thread, elem); /* @A2A */
+         list_push_back (&t->waiting_list, &waiter->waitelem); /* @A2A */
+      }
+	  
+     t->is_dirty = true;                                        /* @A2A */
+     intr_set_level (old_level);                                /* @A2A */
+   }
+   else {                                                       /* @A2A */
+     sema_down (&lock->semaphore);
+   }
+
   lock->holder = thread_current ();
 }
 
@@ -228,9 +269,22 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
+  enum intr_level old_level;                                    /* @A2A */
+  struct thread *holder = lock->holder;                         /* @A2A */
+  struct list_elem *e;                                          /* @A2A */ 
+
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  /* Clear up waiting list of holder
+   * TODO: Is necessary to close intr at here? 150709  
+   */
+  old_level = intr_disable ();                                   /* @A2A */
+  holder->waiting_list.head.next = &(holder->waiting_list.tail);/* @A2A */
+  holder->waiting_list.tail.prev = &(holder->waiting_list.head);/* @A2A */
+  holder->is_dirty = true;                                       /* @A2A */
+  intr_set_level (old_level);                                    /* @A2A */
+  
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }

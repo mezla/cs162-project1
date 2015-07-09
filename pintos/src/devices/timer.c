@@ -218,7 +218,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
       struct thread_duration *p = list_entry (e, struct thread_duration, elem);  /* @A1A */
       ASSERT(p != NULL);                                                         /* @A1A */
 
-      printf ("timer_interrupt: p->due %lld  ticks: %lld\n", p->due, ticks);     /* @A1A */
+      /* printf ("timer_interrupt: p->due %lld  ticks: %lld\n", p->due, ticks);     @A1A */
       if (p->due <= ticks) {                                                     /* @A1A */
 	thread_unblock(p->t);                                                    /* @A1A */
 	list_remove (&p->elem);                                                  /* @A1A */

@@ -80,3 +80,13 @@ pass (void)
   printf ("(%s) PASS\n", test_name);
 }
 
+/*
+void test_alarm(void) {
+  test_alarm_single();
+  test_alarm_multiple();
+  test_alarm_simultaneous();
+  test_alarm_zero();
+  test_alarm_negative();
+}
+*/
+

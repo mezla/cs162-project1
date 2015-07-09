@@ -1,3 +1,8 @@
+/***********************************************************
+ *
+ * $A2 150704 thinkhy  priority scheduler
+ *
+ ***********************************************************/
 #include "threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
@@ -27,6 +32,7 @@ static struct list ready_list;
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
+
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -180,7 +186,7 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  init_thread (t, name, eriority);
+  init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
   /* Stack frame for kernel_thread(). */
@@ -335,14 +341,67 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *t = thread_current();                              /* A2A */
+  int old_effective_priority = t->effective_priority;               /* A2A */
+  t->priority = new_priority;                                       /* A2C */
+  t->is_dirty = true;                                               /* A2A */
+
+  /* If the current thread no longer has the highest priority, yields. A2A */
+  /* If updated effective priority is less than old priority, then yield */
+  if (old_effective_priority < thread_get_priority())               /* A2A */
+     thread_yield();                                                /* A2A */
+}
+
+/* Returns the current thread's priority. @A2A */
+int
+thread_get_effective_priority(struct thread *t) 
+{
+  int priority;
+  struct list_elem *e;
+
+  /* return thread_current ()->priority;                              A2D */
+  /* if current thread is dirty, update effective priority value with     
+   * max(priority, effective_priorities in waiting threads)
+   */
+  if (t->is_dirty) 
+   {
+     t->effective_priority = t->priority;                                        /* @A2A */
+     for (e = list_begin (&(t->waiting_list));                                   /* @A2A */ 
+            e != list_end (&(t->waiting_list)); e = list_next (e))               /* @A2A */        
+      {				                                                 
+        struct thread *waiting_thread = list_entry (e, struct thread, waitelem); /* @A2A */
+        priority = thread_get_effective_priority(waiting_thread);                /* @A2A */
+        /* Donate waiting thread's priority if current thread's priority is 
+         * lower                                                                         */
+	if ( t->effective_priority < priority )                                  /* @A2A */
+		t->effective_priority = priority;                                /* @A2A */
+      }
+   }
+
+  /* TODO: shoud lock below line?? 150709                                                */
+  t->is_dirty = false;                                                           /* @A2A */
+
+  return t->effective_priority;                                                  /* @A2A */
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  struct thread *t = thread_current();
+  int priority;
+  struct list_elem *e;
+
+  /* return thread_current ()->priority;                                            A2D */
+  /* if current thread is dirty, update effective priority value with     
+   * max(priority, effective_priorities in waiting threads)
+   */
+  if (t->is_dirty)                                                               /* @A2A */
+   {
+       thread_get_effective_priority(t);                                         /* @A2A */
+   }
+
+  return t->effective_priority;                                                  /* @A2A */
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -353,8 +412,7 @@ thread_set_nice (int nice UNUSED)
 }
 
 /* Returns the current thread's nice value. */
-int
-thread_get_nice (void) 
+int thread_get_nice (void) 
 {
   /* Not yet implemented. */
   return 0;
@@ -463,6 +521,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+ 
+  t->effective_priority = priority;                                 /* @A2A */
+  t->is_dirty = false;                                              /* @A2A */
+  list_init (&(t->waiting_list));                                   /* @A2A */
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -492,8 +554,27 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+
+/*  else                                                                    @A2D */
+/*  return list_entry (list_pop_front (&ready_list), struct thread, elem);  @A2D */
+
+  int current_priority = -1;                                             /* @A2A */
+  struct thread *next_thread = NULL;                                     /* @A2A */
+  struct list_elem *e;                                    		 /* @A2A */        
+  for ( e = list_begin (&ready_list);                                    /* @A2A */
+		e != list_end(&ready_list); e = list_next(e) )           /* @A2A */ 
+   {
+      struct thread *t = list_entry(e, struct thread, elem);             /* @A2A */
+      ASSERT(t != NULL);                                                 /* @A2A */
+      if (t->effective_priority > current_priority)                      /* @A2A */
+       {
+            current_priority = t->effective_priority;                    /* @A2A */
+            next_thread = t;                                             /* @A2A */
+       }
+   }
+  
+   list_remove(&(next_thread->elem));                                    /* @A2A */
+   return next_thread;                                                   /* @A2A */
 }
 
 /* Completes a thread switch by activating the new thread's page

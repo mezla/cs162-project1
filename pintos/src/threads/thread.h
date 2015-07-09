@@ -1,3 +1,8 @@
+/***********************************************************
+ *
+ * $A2 150704 thinkhy  priority scheduler
+ *
+ ***********************************************************/
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
@@ -100,6 +105,16 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    int effective_priority;             /* Effective priority after donation @A2A */
+
+    int is_dirty;                       /* true, this thread's priority has been updated;  @A2A */
+ 	                                /* false, priority is out of date, need to call update func. */
+
+    /* List of all waiting threads.  Threads are added to this list
+      when they are working by current thread who holds lock.                     */
+    struct list waiting_list;                                            /*  @A2A */
+    struct list_elem waitelem;                      /* Waiting list element. @A2A */
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -133,6 +148,7 @@ typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
+int thread_get_effective_priority(struct thread *t);      /* @A2A */
 void thread_set_priority (int);
 
 int thread_get_nice (void);
