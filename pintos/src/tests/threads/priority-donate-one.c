@@ -29,6 +29,31 @@ test_priority_donate_one (void)
   /* Make sure our priority is the default. */
   ASSERT (thread_get_priority () == PRI_DEFAULT);
 
+/* 
+ Acceptable output:
+  (priority-donate-one) begin
+  (priority-donate-one) This thread should have priority 32.  Actual priority: 32.
+  (priority-donate-one) This thread should have priority 33.  Actual priority: 33.
+  (priority-donate-one) acquire2: got the lock
+  (priority-donate-one) acquire2: done
+  (priority-donate-one) acquire1: got the lock
+  (priority-donate-one) acquire1: done
+  (priority-donate-one) acquire2, acquire1 must already have finished, in that order.
+  (priority-donate-one) This should be the last line before finishing this test.
+  (priority-donate-one) end
+ Differences in `diff -u' format:
+  (priority-donate-one) begin
+  (priority-donate-one) This thread should have priority 32.  Actual priority: 32.
+  (priority-donate-one) This thread should have priority 33.  Actual priority: 33.
+- (priority-donate-one) acquire2: got the lock
+- (priority-donate-one) acquire2: done
+- (priority-donate-one) acquire1: got the lock
+- (priority-donate-one) acquire1: done
+  (priority-donate-one) acquire2, acquire1 must already have finished, in that order.
+  (priority-donate-one) This should be the last line before finishing this test.
+  (priority-donate-one) end
+
+ */
   lock_init (&lock);
   lock_acquire (&lock);
   thread_create ("acquire1", PRI_DEFAULT + 1, acquire1_thread_func, &lock);

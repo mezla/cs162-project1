@@ -75,7 +75,6 @@
 **Data Structure**
    
    * waiting list in thread struct: other threads waiting for this thread.
-   * waitedBy list in thread.cL:  other threads which this thread is waiting for ?? Is this list needed?? Should NOT
    * is_dirty flag in thread struct: true, this thread's priority has been updated; false, priority is out of date, need to call update func.
    * effective_priority in thread struct: effective priority after doing donation.
 
@@ -99,6 +98,14 @@
          - loop threads in ready_list and select the thread with maximum effective priority as next running thread 
 	 - remove selected next thread from ready_list
    ```
+   * **tid_t thread_create ( ... )**
+
+   ```
+     Add below code to pass testcase priority_change
+
+        - if new thread's priority is greater than current thread
+	-      current thread yields
+   ```
 
    * **void thread_set_priority (int new_priority)** 
 
@@ -110,14 +117,26 @@
   * **int thread_get_priority (void)** : 
 
   ```
-         - If this thread is dirty, call this function recursively to update donated priority and return it.
+         - If this thread is dirty, call this function thread_get_effective_priority to update donated priority and return it.
          - Else return current priority.
   ```
  
+  * **int thread_get_effective_priority(struct thread *t)**
+
+  ```
+        - if this thread is dirty 
+        -    update effective priority value with max(priority, effective_priorities in waiting threads)
+        -    update is_dirty flag to false
+        - return effective priority
+  ``
+
   * lock_acquire (struct lock *lock)
 
   ```
-         - append semaphore->waiters into current thread's waitingFor list
+         - if holder exists, then
+         -    append current thread to holder's waiting list
+         -    sema_down: wait or pass
+         -    append semaphore->waiters into current thread's waitingFor list
          - mark this thread dirty (so effective priority will be update in next scheduling)
   ```
   
@@ -125,7 +144,6 @@
  
   ``` 
          - remove threads in semaphore->waiters from current thread's waiting list
-         - remove current thread from waiting thread's waited's list
          - mark current thread dirty if effective priority is unequal with original priority
   ```
  

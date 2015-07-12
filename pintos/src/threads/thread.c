@@ -207,6 +207,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  if (t->priority > thread_current()->priority)                 /* @A2A */
+       thread_yield();                                          /* @A2A */
+
   return tid;
 }
 
@@ -348,7 +351,7 @@ thread_set_priority (int new_priority)
 
   /* If the current thread no longer has the highest priority, yields. A2A */
   /* If updated effective priority is less than old priority, then yield */
-  if (old_effective_priority < thread_get_priority())               /* A2A */
+  if (old_effective_priority > thread_get_priority())               /* A2A */
      thread_yield();                                                /* A2A */
 }
 
@@ -376,10 +379,11 @@ thread_get_effective_priority(struct thread *t)
 	if ( t->effective_priority < priority )                                  /* @A2A */
 		t->effective_priority = priority;                                /* @A2A */
       }
+
+       /* TODO: shoud lock below line?? 150709                                           */
+       t->is_dirty = false;                                                      /* @A2A */
    }
 
-  /* TODO: shoud lock below line?? 150709                                                */
-  t->is_dirty = false;                                                           /* @A2A */
 
   return t->effective_priority;                                                  /* @A2A */
 }
@@ -558,7 +562,7 @@ next_thread_to_run (void)
 /*  else                                                                    @A2D */
 /*  return list_entry (list_pop_front (&ready_list), struct thread, elem);  @A2D */
 
-  int current_priority = -1;                                             /* @A2A */
+  int max_priority = -1;                                                 /* @A2A */
   struct thread *next_thread = NULL;                                     /* @A2A */
   struct list_elem *e;                                    		 /* @A2A */        
   for ( e = list_begin (&ready_list);                                    /* @A2A */
@@ -566,9 +570,11 @@ next_thread_to_run (void)
    {
       struct thread *t = list_entry(e, struct thread, elem);             /* @A2A */
       ASSERT(t != NULL);                                                 /* @A2A */
-      if (t->effective_priority > current_priority)                      /* @A2A */
+      int effective_priority = thread_get_effective_priority(t);         /* @A2A */
+      // msg("ready list: %s %u\n", t->name, effective_priority);        /* @A2A */
+      if (effective_priority > max_priority)                             /* @A2A */
        {
-            current_priority = t->effective_priority;                    /* @A2A */
+            max_priority = effective_priority;                           /* @A2A */
             next_thread = t;                                             /* @A2A */
        }
    }
@@ -658,6 +664,27 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+thread_print_readylist() {
+  int current_priority = -1;                                             /* @A2A */
+  struct thread *next_thread = NULL;                                     /* @A2A */
+  struct list_elem *e;                                    		 /* @A2A */        
+  for ( e = list_begin (&ready_list);                                    /* @A2A */
+		e != list_end(&ready_list); e = list_next(e) )           /* @A2A */ 
+   {
+      struct thread *t = list_entry(e, struct thread, elem);             /* @A2A */
+      ASSERT(t != NULL);                                                 /* @A2A */
+      int effective_priority = thread_get_effective_priority(t);         /* @A2A */
+      msg("ready list: %s %u\n", t->name, effective_priority);        /* @A2A */
+      if (effective_priority > current_priority)                         /* @A2A */
+       {
+            current_priority = effective_priority;                       /* @A2A */
+            next_thread = t;                                             /* @A2A */
+       }
+   }
+   if (next_thread);
+	   msg("next thread: %s %u\n", next_thread->name, current_priority);        /* @A2A */
 }
 
 /* Offset of `stack' member within `struct thread'.

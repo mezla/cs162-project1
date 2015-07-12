@@ -11,7 +11,7 @@ else
         pgm="alarm-testsuit"
     fi
     echo "PGM: $pgm"
-
+	
     case "$pgm" in 
        "alarm-testsuit")
 	    pintos --qemu -v -- -q run alarm-single
@@ -20,7 +20,11 @@ else
 	    pintos --qemu -v -- -q run alarm-zero
 	    pintos --qemu -v -- -q run alarm-negative
             ;;
-        *)  pintos --qemu -v -- -q run $pgm
+       "priority")
+	    # pintos --qemu -v -- -q run alarm-priority
+	    pintos --qemu -v -- -q run priority-change
+            ;;
+       *)   pintos --qemu -v -- -q run $pgm
             ;;		
     esac
 fi

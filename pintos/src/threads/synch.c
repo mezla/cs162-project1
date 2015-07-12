@@ -115,13 +115,36 @@ void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
+  struct list_elem *e;                                              /* @A2A */
+  int max_priority = -1;                                            /* @A2A */
+  struct thread* next_holder = NULL;                                /* @A2A */
 
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  {
+    /* thread_unblock (list_entry (list_pop_front (&sema->waiters),    @A2D */
+    /*                             struct thread, elem));              @A2D */
+    for ( e = list_begin (&sema->waiters);                          /* @A2A */
+		e != list_end(&sema->waiters); e = list_next(e) )   /* @A2A */ 
+      {
+	 struct thread *t = list_entry(e, struct thread, elem);     /* @A2A */
+	 ASSERT(t != NULL);                                         /* @A2A */
+	 int effective_priority = thread_get_effective_priority(t); /* @A2A */
+	 if (effective_priority > max_priority)                     /* @A2A */
+	  {
+	       max_priority = effective_priority;                   /* @A2A */
+	       next_holder = t;                                     /* @A2A */
+	  }
+      }
+
+      ASSERT(next_holder != NULL);                                  /* @A2A */
+      list_remove(&next_holder->elem);                              /* @A2A */
+      thread_unblock (next_holder);                           
+  }
+
+
   sema->value++;
   intr_set_level (old_level);
 }
@@ -213,18 +236,23 @@ lock_acquire (struct lock *lock)
   if (holder != NULL) 
    {
      old_level = intr_disable ();                               /* @A2A */
-     list_push_back (&holder->waiting_list, &t->elem);          /* @A2A */
-     t->is_dirty = true;                                        /* @A2A */
+     list_push_back (&holder->waiting_list, &t->waitelem);      /* @A2A */
+     holder->is_dirty = true;                                   /* @A2A */
      intr_set_level (old_level);                                /* @A2A */
 
      sema_down (&lock->semaphore);                              /* @A2A */
 
      old_level = intr_disable ();                               /* @A2A */
+   
+     /* Now current thread is owner of lock, remove itself from 
+      * semaphore list  
+      */
+     list_remove(&(t->waitelem));                                   /* @A2A */
 
      /* Copy waiters from last holder to current                 
       * thread's waiting list                                   
       */ 
-     for ( e = list_begin (&lock->semaphore.waiters);          /* @A2A */
+     for ( e = list_begin (&lock->semaphore.waiters);           /* @A2A */
 	e != list_end(&lock->semaphore.waiters); e = list_next(e) ) /* @A2A */ 
       {
          struct thread *waiter = list_entry(e, struct thread, elem); /* @A2A */
@@ -269,9 +297,11 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
-  enum intr_level old_level;                                    /* @A2A */
-  struct thread *holder = lock->holder;                         /* @A2A */
-  struct list_elem *e;                                          /* @A2A */ 
+  enum intr_level old_level;                                                /* @A2A */
+  struct thread *holder = lock->holder;                                     /* @A2A */
+  int old_effective_priority = holder->effective_priority;                  /* @A2A */
+  struct list_elem *e1, *e2;                                                /* @A2A */ 
+  struct list *sem_list = &(lock->semaphore.waiters);                       /* @A2A */
 
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
@@ -279,14 +309,40 @@ lock_release (struct lock *lock)
   /* Clear up waiting list of holder
    * TODO: Is necessary to close intr at here? 150709  
    */
-  old_level = intr_disable ();                                   /* @A2A */
-  holder->waiting_list.head.next = &(holder->waiting_list.tail);/* @A2A */
-  holder->waiting_list.tail.prev = &(holder->waiting_list.head);/* @A2A */
-  holder->is_dirty = true;                                       /* @A2A */
-  intr_set_level (old_level);                                    /* @A2A */
-  
+  old_level = intr_disable ();                                              /* @A2A */
+
+  /* Remove threads in semaphore->waiters from current 
+   * thread's waiting list
+   */
+  for (e1 = list_begin (sem_list); e1 != list_end (sem_list);               /* @A2A */
+		e1 = list_next (e1))                                        /* @A2A */
+   {
+      struct thread *t1 = list_entry (e1, struct thread, elem);             /* @A2A */
+
+      for (e2 = list_begin (&(holder->waiting_list));                       /* @A2A */
+             e2 != list_end (&(holder->waiting_list)); e2 = list_next (e2)) /* @A2A */
+        {
+	   struct thread *t2 = list_entry (e2, struct thread, waitelem);    /* @A2A */
+           if (t1 == t2) {                                                  /* @A2A */
+              list_remove(&(t2->waitelem));                                 /* @A2A */
+              if (t2->effective_priority == old_effective_priority)         /* @A2A */
+		      holder->is_dirty = true;                              /* @A2A */
+              break;                                                        /* @A2A */
+           }		
+        }
+   }
+
+  /* Mark current thread dirty if effective priority is unequal 
+   * with original priority
+   */
+  intr_set_level (old_level);                                               /* @A2A */
+
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  if (holder->is_dirty)                                                     /* @A2A */
+     thread_yield();                                                        /* @A2A */
+  
 }
 
 /* Returns true if the current thread holds LOCK, false

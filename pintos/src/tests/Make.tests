@@ -35,7 +35,7 @@ check:: results
 
 results: $(RESULTS)
 	@for d in $(TESTS) $(EXTRA_GRADES); do			\
-		if echo PASS | cmp -s $$d.result -; then	\
+		if echo PASS | cmp -s $(SRCDIR)/$$d.result -; then	\
 			echo "pass $$d";			\
 		else						\
 			echo "FAIL $$d";			\
@@ -51,8 +51,12 @@ $(foreach test,$(TESTS),$(eval $(test).output: TEST = $(test)))
 # Prevent an environment variable VERBOSE from surprising us.
 VERBOSE =
 
-TESTCMD = pintos -v -k -T $(TIMEOUT)
+#TESTCMD = pintos -v -k -T $(TIMEOUT)  @A2D  
+# @A2A
+# pintos --qemu -v -- -q run alarm-multiple
+TESTCMD = pintos 
 TESTCMD += $(SIMULATOR)
+TESTCMD += -v
 TESTCMD += $(PINTOSOPTS)
 ifeq ($(filter userprog, $(KERNEL_SUBDIRS)), userprog)
 TESTCMD += $(FILESYSSOURCE)
@@ -68,9 +72,11 @@ TESTCMD += -f
 endif
 TESTCMD += $(if $($(TEST)_ARGS),run '$(*F) $($(TEST)_ARGS)',run $(*F))
 TESTCMD += < /dev/null
-TESTCMD += 2> $(TEST).errors $(if $(VERBOSE),|tee,>) $(TEST).output
+TESTCMD += 2> $(SRCDIR)/$(TEST).errors $(if $(VERBOSE),|tee,>) $(SRCDIR)/$(TEST).output
 %.output: kernel.bin loader.bin
 	$(TESTCMD)
 
+# perl -I../.. ../../tests/threads/alarm-single.ck tests/threads/alarm-single tests/threads/alarm-single.result
 %.result: %.ck %.output
-	perl -I$(SRCDIR) $< $* $@
+	perl -I$(SRCDIR) $< $(SRCDIR)/$* $(SRCDIR)/$@
+

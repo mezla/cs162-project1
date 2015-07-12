@@ -56,3 +56,4 @@ alarm_priority_thread (void *aux UNUSED)
 
   sema_up (&wait_sema);
 }
+
