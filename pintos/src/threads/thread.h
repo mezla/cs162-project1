@@ -110,6 +110,10 @@ struct thread
     int is_dirty;                       /* true, this thread's priority has been updated;  @A2A */
  	                                /* false, priority is out of date, need to call update func. */
 
+    /* the thread waited by this thread, 
+       to handle dirty flag crossing along  nested donation chain */
+    struct thread * waited_thread;                                       /* @A2A */
+
     /* List of all waiting threads.  Threads are added to this list
       when they are working by current thread who holds lock.                     */
     struct list waiting_list;                                            /*  @A2A */
@@ -149,11 +153,15 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 int thread_get_effective_priority(struct thread *t);      /* @A2A */
+void thread_set_dirty(struct thread *t, bool is_dirty);   /* @A2A */
 void thread_set_priority (int);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+
+void print_waiting_list(struct list *waiting_list);      /* @A2A */
 
 #endif /* threads/thread.h */

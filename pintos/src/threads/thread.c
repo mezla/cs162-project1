@@ -344,36 +344,48 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  struct thread *t = thread_current();                              /* A2A */
-  int old_effective_priority = t->effective_priority;               /* A2A */
-  t->priority = new_priority;                                       /* A2C */
-  t->is_dirty = true;                                               /* A2A */
+  struct thread *t = thread_current();                              /* @A2A */
+  int old_effective_priority = t->effective_priority;               /* @A2A */
+  t->priority = new_priority;                                       /* @A2C */
+  t->is_dirty = true;                                               /* @A2A */
 
-  /* If the current thread no longer has the highest priority, yields. A2A */
+  /* If the current thread no longer has the highest priority, yields. @A2A */
   /* If updated effective priority is less than old priority, then yield */
-  if (old_effective_priority > thread_get_priority())               /* A2A */
-     thread_yield();                                                /* A2A */
+  if (old_effective_priority > thread_get_priority())               /* @A2A */
+     thread_yield();                                                /* @A2A */
 }
 
-/* Returns the current thread's priority. @A2A */
-int
-thread_get_effective_priority(struct thread *t) 
-{
-  int priority;
-  struct list_elem *e;
+/* Set flag that determins if effective_priorities needs to be updated @A2A */
+void thread_set_dirty(struct thread *t, bool is_dirty)              /* @A2A */
+{ 
+   ASSERT(is_thread(t));                                            /* @A2A */
+   t->is_dirty = is_dirty;                                          /* @A2A */
+}
 
-  /* return thread_current ()->priority;                              A2D */
+/* Returns the current thread's priority.                              @A2A */
+int
+thread_get_effective_priority(struct thread *t)                     /* @A2A */
+{
+  int priority;                                                     /* @A2A */ 
+  struct list_elem *e;                                              /* @A2A */
+  enum intr_level old_level;                                        /* @A2A */  
+
+
+  /* return thread_current ()->priority;                               @A2D */
   /* if current thread is dirty, update effective priority value with     
    * max(priority, effective_priorities in waiting threads)
    */
-  if (t->is_dirty) 
+  if (t->is_dirty)                                                  /* @A2A */
    {
+     old_level = intr_disable ();
      t->effective_priority = t->priority;                                        /* @A2A */
      for (e = list_begin (&(t->waiting_list));                                   /* @A2A */ 
             e != list_end (&(t->waiting_list)); e = list_next (e))               /* @A2A */        
       {				                                                 
         struct thread *waiting_thread = list_entry (e, struct thread, waitelem); /* @A2A */
+	ASSERT(waiting_thread->waited_thread == t);
         priority = thread_get_effective_priority(waiting_thread);                /* @A2A */
+
         /* Donate waiting thread's priority if current thread's priority is 
          * lower                                                                         */
 	if ( t->effective_priority < priority )                                  /* @A2A */
@@ -381,7 +393,8 @@ thread_get_effective_priority(struct thread *t)
       }
 
        /* TODO: shoud lock below line?? 150709                                           */
-       t->is_dirty = false;                                                      /* @A2A */
+       thread_set_dirty(t, false);                                               /* @A2A */
+       intr_set_level (old_level);                                               /* @A2A */
    }
 
 
@@ -393,10 +406,9 @@ int
 thread_get_priority (void) 
 {
   struct thread *t = thread_current();
-  int priority;
-  struct list_elem *e;
+  /* int priority;                                                                 @A2D */
 
-  /* return thread_current ()->priority;                                            A2D */
+  /* return thread_current ()->priority;                                           @A2D */
   /* if current thread is dirty, update effective priority value with     
    * max(priority, effective_priorities in waiting threads)
    */
@@ -527,6 +539,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
  
   t->effective_priority = priority;                                 /* @A2A */
+  t->waited_thread = NULL;                                          /* @A2A */
   t->is_dirty = false;                                              /* @A2A */
   list_init (&(t->waiting_list));                                   /* @A2A */
 
@@ -569,7 +582,7 @@ next_thread_to_run (void)
 		e != list_end(&ready_list); e = list_next(e) )           /* @A2A */ 
    {
       struct thread *t = list_entry(e, struct thread, elem);             /* @A2A */
-      ASSERT(t != NULL);                                                 /* @A2A */
+      ASSERT(is_thread(t));                                                 /* @A2A */
       int effective_priority = thread_get_effective_priority(t);         /* @A2A */
       // msg("ready list: %s %u\n", t->name, effective_priority);        /* @A2A */
       if (effective_priority > max_priority)                             /* @A2A */
@@ -666,25 +679,19 @@ allocate_tid (void)
   return tid;
 }
 
-thread_print_readylist() {
+void print_waiting_list(struct list *waiting_list) {                     /* @A2A */
   int current_priority = -1;                                             /* @A2A */
   struct thread *next_thread = NULL;                                     /* @A2A */
   struct list_elem *e;                                    		 /* @A2A */        
-  for ( e = list_begin (&ready_list);                                    /* @A2A */
-		e != list_end(&ready_list); e = list_next(e) )           /* @A2A */ 
+  msg("Entry of print_waiting_list\n");
+  for ( e = list_begin (waiting_list);                                   /* @A2A */
+		e != list_end(waiting_list); e = list_next(e) )          /* @A2A */ 
    {
-      struct thread *t = list_entry(e, struct thread, elem);             /* @A2A */
-      ASSERT(t != NULL);                                                 /* @A2A */
-      int effective_priority = thread_get_effective_priority(t);         /* @A2A */
-      msg("ready list: %s %u\n", t->name, effective_priority);        /* @A2A */
-      if (effective_priority > current_priority)                         /* @A2A */
-       {
-            current_priority = effective_priority;                       /* @A2A */
-            next_thread = t;                                             /* @A2A */
-       }
+      struct thread *t = list_entry(e, struct thread, waitelem);         /* @A2A */
+      ASSERT(is_thread(t));                                              /* @A2A */
+      msg("waiting list: %s %s\n", t->name, t->waited_thread->name);     /* @A2A */
    }
-   if (next_thread);
-	   msg("next thread: %s %u\n", next_thread->name, current_priority);        /* @A2A */
+  msg("End of print_waiting_list\n");
 }
 
 /* Offset of `stack' member within `struct thread'.
