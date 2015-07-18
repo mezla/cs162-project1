@@ -77,6 +77,7 @@
    * waiting list in thread struct: other threads waiting for this thread.
    * is_dirty flag in thread struct: true, this thread's priority has been updated; false, priority is out of date, need to call update func.
    * effective_priority in thread struct: effective priority after doing donation.
+   * watied_thread in thread struct: the thread that this thread is waiting for
 
 **Interface**
 
@@ -95,8 +96,9 @@
    ```
      Add below code: 
 
-         - loop threads in ready_list and select the thread with maximum effective priority as next running thread 
-	 - remove selected next thread from ready_list
+        - loop threads in ready_list and select the thread with maximum effective priority as next running thread 
+	- remove selected next thread from ready_list
+
    ```
    * **tid_t thread_create ( ... )**
 
@@ -110,15 +112,15 @@
    * **void thread_set_priority (int new_priority)** 
 
    ```
-         - Sets the current thread's priority to new_priority.  
-         - If the current thread no longer has the highest priority, yields.
+        - Sets the current thread's priority to new_priority.  
+        - If the current thread no longer has the highest priority, yields.
    ```
  
   * **int thread_get_priority (void)** : 
 
   ```
-         - If this thread is dirty, call this function thread_get_effective_priority to update donated priority and return it.
-         - Else return current priority.
+        - If this thread is dirty, call this function thread_get_effective_priority to update donated priority and return it.
+        - Else return current priority.
   ```
  
   * **int thread_get_effective_priority(struct thread *t)**
@@ -134,18 +136,51 @@
 
   ```
          - if holder exists, then
+         -    assign holder to current thread's waited thread
+         -    process waiting chain for nested donation, 
+	 -       set waited thread dirty if it's not NULL
+         -       assign waited thread's waited thread to waited thread
          -    append current thread to holder's waiting list
-         -    sema_down: wait or pass
-         -    append semaphore->waiters into current thread's waitingFor list
-         - mark this thread dirty (so effective priority will be update in next scheduling)
+         -    sema_down: wait and pass
+         - endif
+         - append semaphore->waiters into current thread's waitingFor list
+         - mark this thread dirty (so effective priority will be updated in next scheduling)
+         - set lock's holder to current thread
   ```
   
   * lock_release(struct lock *lock)
  
   ``` 
-         - remove threads in semaphore->waiters from current thread's waiting list
-         - mark current thread dirty if effective priority is unequal with original priority
+	 - assert current thread is lock holder
+         - for threads both in semaphore waiter and in current thread(holder)'s waiting list
+         -     remove the thread from waiting list
+         -     set the thread's waited thread to NULL
+         - mark current thread dirty if necessary
+         - set lock's holder to NULL
+         - if current thread's priority is not maximum, yield current thread
   ```
+
+  * sema_up(struct lock *lock)  
+ 
+  ``` 
+      Need to add some code in sema_up function to get all cases passed
+
+	 - pick the thread in sema->waiters with maximum effective priority as next thread
+         - current thread will yiled if it is not highest-priority thread in ready list
+
+  ``` 
+
+  * void cond_signal (struct condition *cond, struct lock *lock UNUSED)
+
+  ``` 
+      Add some code to pass testcase priority-condvar  
+
+         - pick a wait semaphore with highest-priority thread from COND's waiting list
+         - remove the picked waiter from waiting list
+         - sema_up the waiter
+  ``` 
+ 
+  
  
 ###  Test strategy
 
@@ -161,19 +196,18 @@ Phase II:
 
 ### Test case
 
-   * Test ThreadGrader5.a: Tests priority scheduler without donation
-      - VAR1: MyTester.PriopritySchedulerVAR1. Create several(>2) threads, verify these threads can be run successfully.
-      - VAR2: MyTester.PriopritySchedulerVAR2. Create lots of threads with more locks and more complicated resource allocation
-
-   * Test ThreadGrader5.c: Tests priority scheduler without donation, altering priorities of threads after they've started running
-      - VAR3: MyTester.PriopritySchedulerVAR3. Create several(>2) threads, decrease or increase the priorities of these threads, verify these threads can be run successfully.
-      - VAR4: MyTester.PriopritySchedulerVAR4. Create a scenario to hit the priority inverse problem. Verify the highest thread is blocked by lower priority thread.
-
-   * Test ThreadGrader6a.a: Tests priority donation
-      - VAR: Tested by VAR4
-
-   * Test ThreadGrader6a.b: Tests priority donation with more locks and more complicated resource allocation
-      - VAR: Tested by Other cases.
+   * tests/threads/priority-change
+   * tests/threads/priority-donate-one
+   * tests/threads/priority-donate-multiple
+   * tests/threads/priority-donate-multiple2
+   * tests/threads/priority-donate-nest
+   * tests/threads/priority-donate-sema
+   * tests/threads/priority-donate-lower
+   * tests/threads/priority-fifo
+   * tests/threads/priority-preempt
+   * tests/threads/priority-sema
+   * tests/threads/priority-condvar
+   * tests/threads/priority-donate-chain
 
 
 ## 4BSD Scheduler

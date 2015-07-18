@@ -142,10 +142,15 @@ sema_up (struct semaphore *sema)
       ASSERT(next_holder != NULL);                                  /* @A2A */
       list_remove(&next_holder->elem);                              /* @A2A */
       thread_unblock (next_holder);                           
+
   }
 
   sema->value++;
   intr_set_level (old_level);
+
+  if (next_holder && next_holder->effective_priority                /* @A2A */
+		        > thread_current ()->effective_priority)    /* @A2A */
+	   thread_yield ();                                         /* @A2A */
 }
 
 static void sema_test_helper (void *sema_);
@@ -247,26 +252,26 @@ lock_acquire (struct lock *lock)
              thread_set_dirty(waited_thread, true);             /* @A2A */
              waited_thread = waited_thread->waited_thread;      /* @A2A */
        } 
-    //} /* End of if (holder != NULL)                                @A2A */
+    //} /* End of if (holder != NULL)                              @A2A */
 
      intr_set_level (old_level);                                /* @A2A */
 
-     //sema_down (&lock->semaphore);                              /* @A2A */
+     //sema_down (&lock->semaphore);                            /* @A2A */
 
      /* Now we get the lock                                        @A2A */
-     //old_level = intr_disable ();                               /* @A2A */
+     //old_level = intr_disable ();                             /* @A2A */
 
      /* Now current thread is owner of lock, remove itself from 
       * semaphore list  
       */
-     //list_remove(&(t->waitelem));                               /* @A2A */
-     //t->waited_thread = NULL;                                   /* @A2A */
+     //list_remove(&(t->waitelem));                             /* @A2A */
+     //t->waited_thread = NULL;                                 /* @A2A */
 
-     //intr_set_level (old_level);                                    /* @A2A */
+     //intr_set_level (old_level);                              /* @A2A */
    }  
-   //else                                     /* No holder                @A2A */
+   //else                                     /* No holder         @A2A */
    //{
-   sema_down (&lock->semaphore);         /* perform P primitive           */
+   sema_down (&lock->semaphore);         /* perform P primitive         */
    //}
      
    /* Copy waiters from last holder to current                 
@@ -280,11 +285,13 @@ lock_acquire (struct lock *lock)
      list_push_back (&t->waiting_list, &waiter->waitelem);           /* @A2A */
      waiter->waited_thread = t;                                      /* @A2A */
    }
-
+    
    t->is_dirty = true;                                               /* @A2A */
    lock->holder = t;                                                 /* @A2C */
    intr_set_level (old_level);                                       /* @A2A */
 }
+
+
 
 /* Tries to acquires LOCK and returns true if successful or false
    on failure.  The lock must not already be held by the current
@@ -311,14 +318,14 @@ lock_try_acquire (struct lock *lock)
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
-void
-lock_release (struct lock *lock) 
+void lock_release (struct lock *lock) 
 {
   enum intr_level old_level;                                                /* @A2A */
   struct thread *holder = lock->holder;                                     /* @A2A */
   int old_effective_priority = holder->effective_priority;                  /* @A2A */
   struct list_elem *e1, *e2;                                                /* @A2A */ 
   struct list *sem_list = &(lock->semaphore.waiters);                       /* @A2A */
+  bool dirty_flag = false;                                                  /* @A2A */
 
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
@@ -337,24 +344,11 @@ lock_release (struct lock *lock)
       struct thread *t1 = list_entry (e1, struct thread, elem);             /* @A2A */
       list_remove(&(t1->waitelem));                                         /* @A2A */
       t1->waited_thread = NULL;                                             /* @A2A */
-
-      // for (e2 = list_begin (&(holder->waiting_list));                       /* @A2A */
-      //        e2 != list_end (&(holder->waiting_list)); e2 = list_next (e2)) /* @A2A */
-      //   {
-      //      struct thread *t2 = list_entry (e2, struct thread, waitelem);    /* @A2A */
-      //      ASSERT(t2->waited_thread == holder);
-      //      if (t1 == t2) {                                                  /* @A2A */
-      //         list_remove(&(t2->waitelem));                                 /* @A2A */
-      //         t2->waited_thread = NULL;                                     /* @A2A */
-      //         if (t2->effective_priority == old_effective_priority)         /* @A2A */
-      //   	      thread_set_dirty(holder, true);                       /* @A2A */
-      //         break;                                                        /* @A2A */
-      //      }		
-      //   }
+      if (holder->effective_priority >= t1->effective_priority)             /* @A2A */
+             dirty_flag = true;                                             /* @A2A */
    }
 
-  thread_set_dirty(holder, true);                       /* @A2A */
-
+  thread_set_dirty(holder, dirty_flag);                                     /* @A2A */
   lock->holder = NULL;
 
   /* Mark current thread dirty if effective priority is unequal 
@@ -366,7 +360,6 @@ lock_release (struct lock *lock)
 
   if (holder->is_dirty)                                                     /* @A2A */
      thread_yield();                                                        /* @A2A */
-  
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -445,14 +438,40 @@ cond_wait (struct condition *cond, struct lock *lock)
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) 
 {
+  struct semaphore_elem *waiter;                                    /* @A2A */
+  struct semaphore_elem *next_waiter;                               /* @A2A */
+  struct list_elem *e;                                              /* @A2A */
+  struct list_elem *te;                                             /* @A2A */
+  struct thread    *t;                                              /* @A2A */
+  int    max_priority = -1;                                         /* @A2A */
   ASSERT (cond != NULL);
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+   { 
+    /* sema_up (&list_entry (list_pop_front (&cond->waiters),         @A2D */
+    /*                    struct semaphore_elem, elem)->semaphore);   @A2D */
+    /* pick the highest priority in waiters list                      @A2A */
+    for ( e = list_begin (&cond->waiters);                         /* @A2A */
+	      e != list_end(&cond->waiters); e = list_next(e) )    /* @A2A */ 
+     {
+	waiter = list_entry (e, struct semaphore_elem, elem);      /* @A2A */
+	ASSERT (waiter != NULL);                                   /* @A2A */
+        te = list_begin (&waiter->semaphore.waiters);              /* @A2A */
+	t  = list_entry (te, struct thread, elem);                 /* @A2A */
+	int effective_priority = thread_get_effective_priority(t); /* @A2A */
+	if (effective_priority > max_priority)                     /* @A2A */
+	 {
+	    max_priority = effective_priority;                     /* @A2A */
+	    next_waiter = waiter;                                  /* @A2A */
+	 }
+     }
+    
+    list_remove(&next_waiter->elem);                               /* @A2A */
+    sema_up(&next_waiter->semaphore);                              /* @A2A */
+   } 
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
