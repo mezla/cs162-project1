@@ -1,6 +1,7 @@
 /***********************************************************
  *
  * $A2 150704 thinkhy  priority scheduler
+ * $A3 150724 thinkhy  advanced scheduler
  *
  ***********************************************************/
 #ifndef THREADS_THREAD_H
@@ -94,7 +95,9 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    int priority;                       /* Priority.  */
+    int nice;                           /* Nice value        @A3A */
+    int recent_cpu;                  /* current CPU value @A3A */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -162,6 +165,6 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 
-void print_waiting_list(struct list *waiting_list);      /* @A2A */
+//void print_waiting_list(struct list *waiting_list);      /* @A2A */
 
 #endif /* threads/thread.h */

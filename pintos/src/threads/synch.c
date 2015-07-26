@@ -235,6 +235,8 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  if (thread_mlfqs == false)                        /* @A3A */
+   {
   /* if lock holder is not NULL, put current thread
    * into lock holder's waiting list @A2A
    */
@@ -256,28 +258,15 @@ lock_acquire (struct lock *lock)
 
      intr_set_level (old_level);                                /* @A2A */
 
-     //sema_down (&lock->semaphore);                            /* @A2A */
+    }  
+   } /* for if (thread_mlfqs == false)                             @A3A */
 
-     /* Now we get the lock                                        @A2A */
-     //old_level = intr_disable ();                             /* @A2A */
+   sema_down (&lock->semaphore);              /* perform P primitive    */
 
-     /* Now current thread is owner of lock, remove itself from 
-      * semaphore list  
-      */
-     //list_remove(&(t->waitelem));                             /* @A2A */
-     //t->waited_thread = NULL;                                 /* @A2A */
-
-     //intr_set_level (old_level);                              /* @A2A */
-   }  
-   //else                                     /* No holder         @A2A */
-   //{
-   sema_down (&lock->semaphore);         /* perform P primitive         */
-   //}
-     
-   /* Copy waiters from last holder to current                 
-    * thread's waiting list                                   
-    */ 
    old_level = intr_disable ();                                      /* @A2A */
+
+  if (thread_mlfqs == false)                                         /* @A3A */
+   {
    for ( e = list_begin (&lock->semaphore.waiters);                  /* @A2A */
          e != list_end(&lock->semaphore.waiters); e = list_next(e) ) /* @A2A */ 
    {
@@ -287,8 +276,10 @@ lock_acquire (struct lock *lock)
    }
     
    t->is_dirty = true;                                               /* @A2A */
+  } /* for if (thread_mlfqs == false)                                   @A3A */
    lock->holder = t;                                                 /* @A2C */
    intr_set_level (old_level);                                       /* @A2A */
+
 }
 
 
@@ -322,14 +313,15 @@ void lock_release (struct lock *lock)
 {
   enum intr_level old_level;                                                /* @A2A */
   struct thread *holder = lock->holder;                                     /* @A2A */
-  int old_effective_priority = holder->effective_priority;                  /* @A2A */
-  struct list_elem *e1, *e2;                                                /* @A2A */ 
+  struct list_elem *e1;                                                     /* @A2A */ 
   struct list *sem_list = &(lock->semaphore.waiters);                       /* @A2A */
   bool dirty_flag = false;                                                  /* @A2A */
 
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  if (thread_mlfqs == false)                                                /* @A3A */
+   {
   /* Clear up waiting list of holder
    * TODO: Is necessary to close intr at here? 150709  
    */
@@ -355,11 +347,17 @@ void lock_release (struct lock *lock)
    * with original priority
    */
   intr_set_level (old_level);                                               /* @A2A */
+   } /* for if (thread_mlfqs == false)                                         @A3A */
+  else  /* thread_mlfqs == true                                                @A3A */  
+   {
+      lock->holder = NULL;                                                  /* @A3A */
+   } 
 
   sema_up (&lock->semaphore);
 
-  if (holder->is_dirty)                                                     /* @A2A */
-     thread_yield();                                                        /* @A2A */
+  if (thread_mlfqs == false)                                                /* @A3A */
+    if (holder->is_dirty)                                                   /* @A2A */
+       thread_yield();                                                      /* @A2A */
 }
 
 /* Returns true if the current thread holds LOCK, false

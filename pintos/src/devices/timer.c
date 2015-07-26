@@ -1,6 +1,7 @@
 /***********************************************************
  *
  * $A1 150704 thinkhy  alarm lock without busy-waiting
+ * $A2 150721 thinkhy  advance scheduler
 
  *
  ***********************************************************/
@@ -34,7 +35,7 @@ struct thread_duration          /*                                           @A1
   {                             /*                                           @A1A */
     struct  list_elem elem;     /*                                           @A1A */
     int64_t due;                /* # of timer ticks thread will be sleeping for. @A1A */
-    struct thread  *t;          /* sleeping thread.                          @A1A */
+    struct  thread  *t;         /* sleeping thread.                          @A1A */
   };                            /*                                           @A1A */
 
 
@@ -225,6 +226,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
 	list_remove (&p->elem);                                                  /* @A1A */
       }                                                                          /* @A1A */
     }                                                                            /* @A1A */
+
+   
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

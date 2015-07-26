@@ -223,17 +223,25 @@ Phase II:
    * positive nice, to the maximum of 20, decreases the priority of a thread and causes it to give up some CPU time it would otherwise receive.
    * a negative nice, to the minimum of -20, tends to take away CPU time from other threads. 
    * The initial thread starts with a nice value of zero.
-   * Thread priority is calculated initially at thread initialization.  It is also recalculated once every fourth clock tick.
+   * Thread priority is calculated initially at thread initialization.  It is also **recalculated once every fourth clock tick** .
    * Calculate priority: **priority=PRI_MAX-(recent_cpu/4)-(nice*2)**
+   * Once per second(timer_ticks() % TIMER_FREQ == 0) the value of recent_cpu is recalculated for every thread(whether running, ready, or blocked).
 
 **Data structure**
+   * Multi level feedback queues: ready_lists[PRI_MAX+1], static array in thread.c
+   * System load average: load_avg, static double in thread.c
+   * Recent CPU value: recent_cpu, double member in struct thread defined in thread.h 
+   * Ready threads number: the  number of threads that are either running or ready to run at time of update (not including the idle thread).
 
 **Interface**
-   * *set_priority*: calculate priority
+   * *set_priority*: do nothing since threads no longer directly control their own priorities when advanced scheduler enabled.
 
    * *int thread_get_nice (void)*: Returns the current thread's nice value.
 
-   * *void thread_set_nice (int new_nice)*: Sets the current thread's nice value to new nice and recalculates the thread's priority based on the new value.
+   * *void thread_set_nice (int new_nice)*: 
+      - Sets the current thread's nice value to new nice. 
+      - Recalculates the thread's priority based on the new value.
+      - If the running thread no longer has the highest priority, yields.
 
    * *int thread_get_recent_cpu(void)*: Returns 100 times the current thread's recent_cpu value, rounded to the nearest integer.
   
@@ -243,3 +251,45 @@ Phase II:
      3> load_avg = (59/60) * load_avg + (1/60) * ready_threads
          (load_avg was initialized to 0 at boot and recalculated once per second) 
     ```  
+   
+   * *int thread_get_load_avg(void)*: Returns 100 times the current system load average, rounded to the nearest integer.
+
+   * *int thread_get_effective_priority(struct thread *t)*: Return original priority, ignore dirty flag.
+
+   * *init_thread*: 
+      - Ingore the priority argument
+      - The initial thread starts with a nice value of zero.  
+      - Other threads start with a nice value inherited from their parent thread. 
+      - Cet a recent CPU value of zero
+      - !! Don't add thread, add it in unblock(): Calculate new thread's priority and add new thread to the multi-level thread queue
+      - Update ready_thread 
+
+   * *thread_set_priority*: ingore the priority argument.
+
+   * *thread_get_priority*: return the thread's current priority as set by the scheduler.
+
+   * *void thread_init (void)*: 
+      - initialize load average to 0  
+      - initialize ready queues
+      - initialize ready threads number to 0
+         
+      
+   * *thread_tick*: add soem code
+      - Thread priority is recalculated once every fourth clock tick 
+      - Once per second(timer_ticks() % TIMER_FREQ == 0), the value of recent cpu is recalculated for every thread
+      
+   * *next_thread_to_run*: 
+      - Choose a thread from the highest-priority non-empty queue 
+      - If the highest-priority queue, contains multiple threads, then they run in "round robin" order.
+      - Update ready_thread 
+     
+   * *thread_block*:   update ready_threads
+   * *thread_unblock*: 
+      - set thread's status to READY
+      - add thread to appropriate ready queue according to priority
+      - update ready_threads
+
+   * *thread_schedule_tail*: decrease ready_threads by 1 for that previous running thread is dying
+   * *thread_yield*: push back current thread into ready queue
+
+

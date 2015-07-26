@@ -118,3 +118,4 @@ fix_compare (fixed_point_t x, fixed_point_t y)
 }
 
 #endif /* threads/fixed-point.h */
+
