@@ -148,9 +148,18 @@ sema_up (struct semaphore *sema)
   sema->value++;
   intr_set_level (old_level);
 
-  if (next_holder && next_holder->effective_priority                /* @A2A */
+  if (thread_mlfqs)                                                 /* @A3A */
+   {
+    if (next_holder                                                 /* @A3A */
+	&& next_holder->priority > thread_current()->priority)      /* @A3A */
+	   thread_yield ();                                         /* @A3A */
+   }
+  else 
+   {
+    if (next_holder && next_holder->effective_priority              /* @A2A */
 		        > thread_current ()->effective_priority)    /* @A2A */
 	   thread_yield ();                                         /* @A2A */
+   }
 }
 
 static void sema_test_helper (void *sema_);

@@ -101,6 +101,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static int thread_adjust_priority(int priority);                                  /* @A3A */
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -566,15 +567,15 @@ thread_get_effective_priority(struct thread *t)                     /* @A2A */
 
 /* The calculated priority is always adjusted to lie 
 * in the valid range PRI_MIN to PRI_MAX .       @A3A */
-static int thread_adjust_priority(int priority)                      /* @A3A */
- { 
-    if (priority > PRI_MAX)                                          /* @A3A */            
-      return PRI_MAX;                                                /* @A3A */
-    else if (priority < PRI_MIN)                                     /* @A3A */
-      return PRI_MIN;                                                /* @A3A */
-    else                                                             /* @A3A */
-      return priority;                                               /* @A3A */
- } 
+static int thread_adjust_priority(int priority)                                  /* @A3A */
+{ 
+  if (priority > PRI_MAX)                                                        /* @A3A */            
+   return PRI_MAX;                                                               /* @A3A */
+  else if (priority < PRI_MIN)                                                   /* @A3A */
+   return PRI_MIN;                                                               /* @A3A */
+  else                                                                           /* @A3A */
+   return priority;                                                              /* @A3A */
+} 
 
 /* Returns the current thread's priority. */
 int
@@ -753,11 +754,7 @@ init_thread (struct thread *t, const char *name, int priority)
   else                                                              /* @A3A */
      t->nice = thread_current()->nice;                              /* @A3A */
 
-  /* append new thread into thread queue with index=priority           @A3A */
-  int priority = thread_calc_priority (t);                          /* @A3A */
-  // old_level = intr_disable ();                                      /* @A3A */
-  // list_push_back (&ready_queues[priority], &t->elem);               /* @A3A */
-  // intr_set_level (old_level);                                       /* @A3A */
+  thread_calc_priority (t);                                         /* @A3A */
    }                                                                  
   else                                                              /* @A3A */
    {

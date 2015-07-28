@@ -234,6 +234,7 @@ Phase II:
    * Ready threads number: the  number of threads that are either running or ready to run at time of update (not including the idle thread).
 
 **Interface**
+
    * *set_priority*: do nothing since threads no longer directly control their own priorities when advanced scheduler enabled.
 
    * *int thread_get_nice (void)*: Returns the current thread's nice value.
@@ -263,9 +264,12 @@ Phase II:
       - Cet a recent CPU value of zero
       - !! Don't add thread, add it in unblock(): Calculate new thread's priority and add new thread to the multi-level thread queue
       - Update ready_thread 
-
+       
    * *thread_set_priority*: ingore the priority argument.
-
+       
+   * *int thread_adjust_priority(int prioprity)*: add a new static function in thread.c. 
+      - The calculated priority is always adjusted to lie in the valid range PRI_MIN to PRI_MAX 
+       
    * *thread_get_priority*: return the thread's current priority as set by the scheduler.
 
    * *void thread_init (void)*: 
@@ -273,7 +277,6 @@ Phase II:
       - initialize ready queues
       - initialize ready threads number to 0
          
-      
    * *thread_tick*: add soem code
       - Thread priority is recalculated once every fourth clock tick 
       - Once per second(timer_ticks() % TIMER_FREQ == 0), the value of recent cpu is recalculated for every thread
@@ -291,5 +294,17 @@ Phase II:
 
    * *thread_schedule_tail*: decrease ready_threads by 1 for that previous running thread is dying
    * *thread_yield*: push back current thread into ready queue
+
+**Testcases**
+
+   * tests/threads/mlfqs-load-1
+   * tests/threads/mlfqs-load-60
+   * tests/threads/mlfqs-load-avg
+   * tests/threads/mlfqs-recent-1
+   * tests/threads/mlfqs-fair-2
+   * tests/threads/mlfqs-fair-20
+   * tests/threads/mlfqs-nice-2
+   * tests/threads/mlfqs-nice-10
+   * tests/threads/mlfqs-block
 
 
